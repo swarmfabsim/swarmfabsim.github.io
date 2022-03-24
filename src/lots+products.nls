@@ -1,0 +1,120 @@
+;; SWILT WP 3 simple fab simulation - functions & definitions for lots + products
+;; ------------------------------------------------------------------------------
+;;
+
+
+;;;----- Create PRODUCTS from TABLE_R and TABLE_L (which were parsed from config file) ----
+;;  @input    globals:
+;;            TABLE_R: [ [ 0 [1 9 20 5] ]  [ 1 [2 7 5 20...] ] ... ]
+;;                     keys = 0...NOR = number of recipes
+;;                     values = recipe = list of process steps (PIDs)
+;;
+;;            TABLE_L: [ [ 0 50 ]  [ 1 30 ] ... ]
+;;                     keys = 0...NOR
+;;                     values = NOL = number of lots
+;;
+;;  @result   product_list with agents of all created products
+;;
+;;            NOTE: lots can afterwards be set up with the normal setup-lots procedure
+;;
+;;  @context  -
+;;
+to setup-products-config-file
+  
+  foreach table:keys TABLE_R [ rn ->                           ; TABLE_R key rn = recipe number = product type (!= PID)
+    
+    create-products 1 [
+      set p.product_type rn
+      set p.recipe table:get TABLE_R rn                        ; table value = list with recipe      
+      set p.number_of_lots table:get TABLE_L rn                ; get corresponding number of lots from TABLE_L    
+      set p.RPT calculate-rpt p.recipe                         ; Raw Processing Time for this product; to be used in calculations of FF, Tardiness later
+      
+      hide-turtle                                              ; hides the product because 'products' are only used as prototype 
+                                                               ; to later generate the required number of lots for each type
+      if DEBUG? [print (word "    Created product: " rn " : " p.number_of_lots " RPT: " p.RPT " : " p.recipe)]
+    ]
+  ]                                                            ; end foreach
+  
+  set product_list []
+  set product_list sort-on [who] products                      ; list of product agents
+  if DEBUG? [print (word "*** Products ***" product_list)]  
+end
+
+
+
+;;;----- Create PRODUCTS from slider settings
+;;  Products are like prototypes for the lots, 
+;;  Creates one product for each product type
+;;
+;;  @input    slider product_types
+;;
+;;  @result   product_list with agents of all created products
+;;
+to setup-products
+  create-products product_types [
+    set p.product_type who - count machines                    ; ATTN: who numbers continue across breeds, TODO: refactor calculation to be more robust
+    set p.recipe n-values recipe_length [random machine_types] ; creates random recipe
+    set p.number_of_lots random max_lot_number + 1             ; how many lots of each product to create in [1...max_lot_number]
+    set p.RPT calculate-rpt p.recipe                           ; Raw Processing Time for this product; to be used in calculations of FF, Tardiness later
+    
+    hide-turtle                                                ; hides the product because 'products' are only used as prototype 
+                                                               ; to later generate the required number of lots for each type
+  ]
+  set product_list []
+  set product_list sort-on [who] products                      ; list of product agents
+end
+
+
+
+;;;----- Calculates the RPT for a given recipe
+;;  RPT = Raw Process Time
+;;
+;;  @input recipe (list of production steps)
+;;
+;;  @returns RPT in ticks
+;;
+to-report calculate-rpt [ recipe ]
+  let rpt 0
+  
+  foreach recipe [ step -> 
+    set rpt rpt + [ m.production_time ] of one-of machines with [ m.machine_type = step ]
+  ] 
+  
+  report rpt
+end
+
+
+
+;;;----- Create LOTS based on PRODUCTS (product_list)  --  SAME for both, slider and config file
+;;
+;;  @input    product_list with product agents
+;;
+;;  @result   lots_list with created lot agents
+;;
+to setup-lots
+  foreach product_list [ p ->
+    create-lots [p.number_of_lots] of p [
+                                                               ; --- settings for technical attributes
+      set l.lot_type [p.product_type] of p                     ; inherit type from product
+      set l.recipe [p.recipe] of p                             ; inherit recipe from product
+      set l.recipe_pointer 0                                   ; pointer into recipe
+      set l.processing? FALSE                                  ; lot isn't processing
+      set l.queued? FALSE                                      ; lot not in queue
+      set l.active? TRUE                                       ; lot is in production
+      set l.start_time 0                                       ; when the lot starts production; ATTN: currently all lots start at tick 0
+      set l.end_time 0                                         ; default value - if still 0 at time of statistics calculation, some error occurred (use for sanity check)
+      set l.RPT [p.RPT] of p                                   ; Raw Processing Time for this lot; to be used in calculations of FF, Tardiness later
+      
+      set size 0.5                                             ; --- settings for visualization
+      set label l.lot_type                                     ; set the label to type
+      set color ( 15 + (13 * [label] of self) )                ; assigns color to lot based on label (type) --> each type has the same color
+      set xcor max-pxcor                                       ; sets xcor to the far right of the factory                                                               
+      set ycor ycor + l.lot_type                               ; aligns them evenly spaced along the y-axis in steps of 1
+      set pen-size 1.5
+    ]
+  ]
+  set-default-shape lots "circle"
+  set lots_list []                                             ; list with all lot agents
+  set lots_list sort-on [who] lots
+end
+

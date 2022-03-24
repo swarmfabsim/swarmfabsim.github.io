@@ -1,0 +1,135 @@
+;; this file implements a basic algorithm for comparison to the swarm algorithms
+;; the basic algorithm processes the lots FCFS and chooses queues randomly in scheduling mode
+;;
+
+
+
+;;; Initialize the algorithm.
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-init-basic
+  
+  ; not used in basic algo
+  
+end
+
+
+
+;;; for SCHEDULING only: algo chooses which queue
+;;  @input    the lot to be queued
+;;  @returns  the chosen queue or nobody
+;;  @context  -
+;;
+to-report algo-choose-queue-basic [ l ]
+  
+  let q nobody
+  
+  let process_step get-next-process-step l                    ; next step in recipe (PID)    
+  set q one-of queues with [ q.mtype = process_step ]         ; basic algo chooses queue at random  
+  
+  report q
+  
+end
+
+
+
+;;; SAME for DISPATCHING and SCHEDULING: called when the machine decides which lot to take from the queue
+;;
+;;  Basic Algo implements the following:
+;;    SINGLE STEP machines: FIFO queue, always take the  first lot
+;;          BATCH machines: the fullest batch is taken first
+;;                          if there is no full batch, waits for the timer to run out
+;;                          if a batch fills up in the meantime, takes it
+;;                          if it runs into timeout it takes the biggest available batch
+;;
+;;  @input    machine
+;;  @returns  agentset of the taken lot(s) or empty agentset (no-turtles)
+;;  @context  machine
+;;
+to-report algo-take-from-queue-basic [ m ]
+  
+  let l no-turtles                                            ; agentset of the taken lot(s) for return - init empty
+  
+  ask m [        
+    ifelse m.batch_size = 1 [                                 ; SINGLE STEP machine - has SIMPLE LIST as queue
+      
+      let qu [q.lotlist] of m.queue      
+      if not empty? qu [                                      ; lots in queue
+        
+        let lo first qu                                       ; FIFO queue: get first lot &
+        remove-lot-from-queue m.queue lo                      ;             remove from queue
+        set l turtle-set lo                                   ; convert single lot to agentset for return (compatibility /w batch)                
+        move-in l                                             ; update machine & lot statuses for chosen lot
+      ]
+    ][                                                        ; BATCH machine - has TABLE OF SUBQUEUES
+
+      ifelse m.wait_timer < m.max_wait_batch [                ; look for full batch until timer runs out
+        
+        ifelse tablequeue-get-max-length >= m.batch_size [    ; FULL BATCH FOUND: take it & remember taken lots for return value                    
+          
+          set l tablequeue-take-batch-size m.batch_size       ; remove from queue & remember for return
+          move-in l                                           ; update machine & lot statuses for chosen lots          
+          set m.wait_timer 0                                  ; reset timer
+          
+        ][                                                    ; NO FULL BATCH: continue waiting          
+          set m.wait_timer m.wait_timer + 1
+        ]
+        
+      ][                                                      ; TIMER HAS RUN OUT -> take fullest of current batches
+        let maxlen tablequeue-get-max-length
+        
+        if maxlen > 0 [                                       ; sanity check: tablequeue not totally empty
+
+          set l tablequeue-take-batch-size maxlen             ; remove from queue & remember for return
+          move-in l                                           ; update machine & lot statuses for chosen lots          
+          set m.wait_timer 0                                  ; reset timer
+        ]
+        
+      ]                                                       ; END TIMER HAS RUN OUT      
+    ]                                                         ; END BATCH machine
+  ]  
+
+  report l                                                    ; return agentset with taken lot(s) or empty agentset
+  
+end
+
+
+
+;;; for DISPATCHING and SCHEDULING: called just before the machine frees the finished lots
+;;  @input    -
+;;  @returns  -
+;;  @context  machine
+;;
+to algo-move-out-basic
+  
+  ; not used in basic algo
+  
+end
+
+
+
+;;; called once at start of each tick
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-tick-start-basic
+  
+  ; not used in basic algo
+  
+end
+
+
+
+;;; called once at end of each tick
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-tick-end-basic
+  
+  ; not used in basic algo
+  
+end

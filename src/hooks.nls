@@ -1,0 +1,207 @@
+;; This file implements the hooks that bind the main code file and the algorithms together
+;; and defines the mandatory API for swarm algorithm implementers.
+;; Theses API functions are callbacks that will be called by the main simulation code to
+;; trigger the functions of the swarm algorithm.
+;; Further functions that are useful to swarm algorithm implementers are implemented in
+;; helper-api.nls - the use of these is not mandatory but strongly encouraged!
+;;
+;; SWILT-Simulation.nlogo -> hooks.nls -> algorithm-XXX.nls
+;;
+;; ATTN: all hook-functions must be preceeded by "hook" for namespace reasons 
+;;       and for making their location obvious. Because functions which are implemented in
+;;       another file do not appear in the Procedures dropdown menu. Therefore, when you are
+;;       in the main file, it would be confusing when you see the call to a hook function but
+;;       can't find it in the Procedures dropdown.
+;;
+;;       algorithm-functions must be preceeded by "algo" for namespace reasons and
+;;       end in the algorithm name. Iow. for hook-init you would implement
+;;       algo-init-<name>
+;;       
+;; HOW TO ADD a new ALGORITHM:
+;; 1. add the name to the swarm-algorithm choose in the UI (or to BehaviorSpace)
+;; 2. add the algorithm .nls file to the __includes section
+;; 3. add the respective if-statements and function calls to each of the hooks 
+;;    (template at bottom of file), naming conventions see above
+;;
+
+
+; ----- include all algorithms here, algorithm is chosen from UI or BehaviorSpace -----
+
+__includes [ "algorithm-basic.nls"                    ; basic FCFS algorithm
+             "algorithm-demo.nls"                     ; DEMO
+             "algorithm-baseline.nls"                 ; baseline FCFS algorithm for comparative simulation
+             "algorithm-hormone.nls"                  ; Hormone algorithm
+]
+
+
+;;; Initialize the algorithm
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to hook-init
+  
+  if swarm-algorithm = "basic" [
+    algo-init-basic
+  ]
+  if swarm-algorithm = "demo" [
+    algo-init-demo
+  ]  
+  if swarm-algorithm = "baseline" [
+    algo-init-baseline
+  ]
+  if swarm-algorithm = "hormone" [
+    algo-init-hormone
+  ]   
+  ;  if swarm-algorithm = "xxx" [                     ; ADD your ALGORITHM HERE
+  ;    algo-init-xxx
+  ;  ]
+  
+end
+
+
+
+;;; for SCHEDULING: algo chooses which queue
+;;  @input    the lot to be queued
+;;  @returns  the chosen queue or ""
+;;  @context  lot
+;;
+to-report hook-choose-queue [ l ]
+  
+  if swarm-algorithm = "basic" [
+    report algo-choose-queue-basic l   
+  ]
+  if swarm-algorithm = "demo" [
+    report algo-choose-queue-demo l 
+  ]
+  if swarm-algorithm = "baseline" [
+    report algo-choose-queue-baseline l
+  ]
+  if swarm-algorithm = "hormone" [
+    report algo-choose-queue-hormone l
+  ] 
+  
+end
+
+
+
+;;; for DISPATCHING and SCHEDULING: called when the machine decides which lot to take from the queue
+;;  @input    machine
+;;  @returns  the taken lot or ""
+;;  @context  machine
+;;
+to-report hook-take-from-queue [ m ]
+  
+  if swarm-algorithm = "basic" [
+    report algo-take-from-queue-basic m
+  ]
+  if swarm-algorithm = "demo" [
+    report algo-take-from-queue-demo m  
+  ]
+  if swarm-algorithm = "baseline" [
+    report algo-take-from-queue-baseline m
+  ]
+  if swarm-algorithm = "hormone" [
+    report algo-take-from-queue-hormone m
+  ]
+  
+end
+
+
+
+;;; for DISPATCHING and SCHEDULING: called just before the machine frees the finished lots
+;;  At this point the lots have finished processing but are still in the machine; lot and 
+;;  machine statusses have NOT been updated to free yet.
+;;
+;;  Use eg. for measuring how long lots took from entering the queue -> end of
+;;  process or similar algo functions.
+;;
+;;  @input    -
+;;  @returns  -
+;;  @context  machine
+;;
+to hook-move-out
+  
+  if swarm-algorithm = "basic" [
+    algo-move-out-basic  
+  ]
+  if swarm-algorithm = "demo" [
+    algo-move-out-demo  
+  ]   
+  if swarm-algorithm = "baseline" [
+    algo-move-out-baseline
+  ]
+  if swarm-algorithm = "hormone" [
+    algo-move-out-hormone
+  ]     
+  
+end
+
+
+  
+;;; called once at start of each tick
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to hook-tick-start
+  
+  if swarm-algorithm = "basic" [
+    algo-tick-start-basic  
+  ]
+  if swarm-algorithm = "demo" [
+    algo-tick-start-demo  
+  ]
+  if swarm-algorithm = "baseline" [
+    algo-tick-start-baseline
+  ]
+  if swarm-algorithm = "hormone" [
+    algo-tick-start-hormone
+  ]   
+  
+end
+
+
+
+;;; called once at end of each tick
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to hook-tick-end                                        
+  
+  if swarm-algorithm = "basic" [
+    algo-tick-end-basic
+  ]
+  if swarm-algorithm = "demo" [
+    algo-tick-end-demo
+  ]
+  if swarm-algorithm = "baseline" [
+    algo-tick-end-baseline
+  ]
+  if swarm-algorithm = "hormone" [
+    algo-tick-end-hormone
+  ]   
+  
+end
+
+
+
+;;; add your algorithm here if it does plotting, then choose plotmode 2 in choose on UI
+;;  this hook is called at the very end of go (after hook-tick-end)
+;;  this hook is optional (your algorithm does not have to implement it)
+;;
+to hook-do-plotting  
+  
+  if swarm-algorithm = "demo" [
+    algo-do-plotting-demo
+  ]
+  
+end
+
+
+; Template for adding algorithms
+;
+; if swarm-algorithm = "" [
+;   algo-
+; ]

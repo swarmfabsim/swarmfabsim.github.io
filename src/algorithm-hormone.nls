@@ -1,0 +1,637 @@
+;; this file is a HORMONE ALGORITHM
+;; written by Alex Schnabl alex.schnabl02@gmail.com
+;; 
+;; The algorithm works based on hormones and priority of lots.
+;; Every machine has a certain amount hormone that are produced an decayed every simulation tick.
+;; Based on the amount of hormone of the given machines in a recipie a lots priority is calculated.
+;; The lots then get produced based on their priority.
+;; It is self sustaining and has on average a 9% performance increase over a FCFS algorithm.
+;; For detailed description see: https://mobile.aau.at/publications/elmenreich-2021-An_artificial_hormone-based_algorithm_for_productionscheduling.pdf
+
+
+
+;;; Initialize the algorithm.
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;  TODO put in global swarm table
+to algo-init-hormone
+  table:put swarm_table "ALPHA" 0.9
+  table:put swarm_table "BETA" 3
+  table:put swarm_table "GAMMA" 0.6
+  table:put swarm_table "DELTA" 0.3
+  table:put swarm_table "EPSILON" 0.7
+  table:put swarm_table "M_TYPES_LIST" algo-hormone-get-m-types
+  
+  if (allocation-strategy = "scheduling") [
+    user-message "Scheduling not supported for hormone algorithm"
+    stop
+  ]
+  
+  algo-hormone-parse-links
+  
+  algo-hormone-init-swarm-table
+end
+
+
+;;; Initialize a list with all machine types sorted in it
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to-report algo-hormone-get-m-types
+  let types table:make
+  let types_list []
+  
+  foreach machines_list [ m ->
+    
+    if (table:get-or-default types ([m.machine_type] of m) -1) = -1 [
+      table:put types ([m.machine_type]) of m 0
+      set types_list insert-item 0 types_list [m.machine_type] of m
+    ]
+  ]
+  
+  report types_list
+end
+
+
+;;; Initialize the 'swarm-table' in each lot and machine
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-hormone-init-swarm-table
+  foreach lots_list [ curr_lot -> ask curr_lot [
+    set l.swarm_table table:make 
+    table:put l.swarm_table "priority"      0                          ; table put table key value
+    table:put l.swarm_table "remaining_rpt" 0
+    ]
+    algo-hormone-set-initial-rpt [who] of curr_lot
+  ]
+  
+  ask machines [
+    set m.swarm_table table:make
+    table:put m.swarm_table "hormoneAmount"     0
+    table:put m.swarm_table "highesPriorityType"     0
+  ]
+  
+end
+
+
+; ---------------------------------------------
+; ----------Framework Functions Start----------
+; ---------------------------------------------
+
+
+;;; called once at start of each tick
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-tick-start-hormone
+  
+  algo-hormone-update-hormones
+  
+  algo-hormone-update-priority
+  
+  algo-sort-queues-hormone
+  
+end
+
+
+;;; sorts the queues based on the priority of the lots
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-sort-queues-hormone
+  
+  ask queues [
+    
+    ifelse (not q.isbatch?) [ ; normal queues - highest priority lots on top
+      
+      set q.lotlist sort-by [ [ lot1 lot2 ] -> table:get [l.swarm_table] of lot1 "priority" > table:get [l.swarm_table] of lot2 "priority"] q.lotlist
+    ][ ; batch queues - highest priority lots on top for all queues
+      
+      foreach (table:keys q.lotlist)[ [key] ->
+        table:put q.lotlist key (sort-by [ [ lot1 lot2 ] -> table:get [l.swarm_table] of lot1 "priority" > table:get [l.swarm_table] of lot2 "priority"] (table:get q.lotlist key))
+      ]
+      
+    ]
+  ]
+  
+end
+
+
+;; can be removed?;; can be removed?;; can be removed?;; can be removed?
+;; can be removed?;; can be removed?;; can be removed?
+;;; Find the highest total priority of subqueue in a tablequeue can be removed?
+;;  @input    -
+;;  @returns  highest priority
+;;  @context  machine
+;;  @note     ATTN: assumes machine is batch machine! (no checking done!)
+;;
+to-report tablequeue-find-max-priority
+  
+  let key -1                                        ; init illegal type
+  
+  let tabqueue [q.lotlist] of m.queue
+  let lengthlist map length (table:values tabqueue)
+  
+  if lengthlist != [] [
+    
+    let maxlength max lengthlist                    ; the overall max
+    let ind position maxlength lengthlist           ; position in lengthlist == position in key list
+    set key item ind table:keys tabqueue            ;          bc table:values and table:keys have same order
+  ]
+  
+  report key  
+end
+
+
+;;; for SCHEDULING only: algo chooses which queue
+;;  @input    the lot to be queued
+;;  @returns  the chosen queue or nobody
+;;  @context  -
+;;
+to-report algo-choose-queue-hormone [ l ]
+  
+  
+;  TODO change to report lot
+  
+  
+  
+  
+  report nobody
+end
+
+
+;;; SAME for DISPATCHING and SCHEDULING: called when the machine decides which lot to take from the queue
+;;
+;;  Hormon Algo implements the following:
+;;    SINGLE STEP machines: FIFO queue, always take the first lot with highest priority
+;;          BATCH machines: the fullest batch is taken first
+;;                          if there is no full batch, waits for the timer to run out
+;;                          if a batch fills up in the meantime, takes it
+;;                          if it runs into timeout it take the batch with the highest priority sum
+;;
+;;  @input    machine
+;;  @returns  agentset of the taken lot(s) or empty agentset (no-turtles)
+;;  @context  machine
+;;  TODO batch machines => take batch with highest summed up priority
+to-report algo-take-from-queue-hormone [ m ]
+  
+  let l no-turtles                                            ; agentset of the taken lot(s) for return - init empty
+  
+  ask m [        
+    ifelse m.batch_size = 1 [                                 ; SINGLE STEP machine - has SIMPLE LIST as queue
+      
+      let qu [q.lotlist] of m.queue      
+      if not empty? qu [                                      ; lots in queue
+        
+        let lo simplequeue-get-max-priority qu                ; prio queue: get lot with highest priority
+;        let lo first qu                                       ; prio queue: get first lot
+        remove-lot-from-queue m.queue lo                      ;             remove from queue
+        set l turtle-set lo                                   ; convert single lot to agentset for return (compatibility /w batch)                
+        move-in l                                             ; update machine & lot statuses for chosen lot
+      ]   
+    ][                                                        ; BATCH machine - has TABLE OF SUBQUEUES
+
+      ifelse m.wait_timer < m.max_wait_batch [                ; look for full batch until timer runs out
+        
+        ifelse tablequeue-get-max-length >= m.batch_size [    ; FULL BATCH FOUND: take it & remember taken lots for return value | If Full batch exists always take full batch regardless of priority    
+          
+          set l tablequeue-take-batch-size m.batch_size       ; remove from queue & remember for return
+          move-in l                                           ; update machine & lot statuses for chosen lots          
+          set m.wait_timer 0                                  ; reset timer
+          
+        ][                                                    ; NO FULL BATCH: continue waiting          
+          set m.wait_timer m.wait_timer + 1
+        ]
+        
+      ][                                                      ; TIMER HAS RUN OUT -> take batch with highest priority
+        let max_prio_key tablequeue-get-max-priority
+        
+        if max_prio_key > -1 [                                ; if -1 there are no lots in queue
+          
+          set l tablequeue-take-type max_prio_key             ; remove from queue & remember for return
+          move-in l                                           ; update machine & lot statuses for chosen lots          
+          set m.wait_timer 0                                  ; reset timer
+        ]
+        
+      ]                                                       ; END TIMER HAS RUN OUT      
+    ]                                                         ; END BATCH machine
+  ]  
+
+  report l                                                    ; return agentset with taken lot(s) or empty agentset
+  
+end
+
+;;; Gets subqueue with highest priority
+;;  @input    queue
+;;  @returns  the first lot with the highest priority
+;;  @context  machine
+;;
+to-report simplequeue-get-max-priority [ q ]
+  let return_lot nobody
+  let max_prio -1
+  
+  foreach q [ [curr_lot] ->
+    let p (table:get [l.swarm_table] of curr_lot "priority")
+    if ( p > max_prio )[
+      set max_prio p
+      set return_lot curr_lot
+    ]
+  ]
+  
+  report return_lot
+end  
+
+;;; Gets subqueue with highest priority
+;;  @input
+;;  @returns  the key in the table with the subqueue
+;;  @context  machine
+;;
+to-report tablequeue-get-max-priority
+  
+  let max_prio_key -1
+  let max_prio -1
+  
+  foreach (table:keys [q.lotlist] of m.queue)[ [key] ->
+    let lot_batch table:get ([q.lotlist] of m.queue) key
+    let sum_prio 0
+      foreach lot_batch [ [curr_lot] ->
+        set sum_prio sum_prio + (table:get [l.swarm_table] of curr_lot "priority")
+      ]
+      if (sum_prio > max_prio)[
+        set max_prio sum_prio
+        set max_prio_key key
+      ]
+  ]
+  
+  report max_prio_key
+end
+
+
+;;; for DISPATCHING and SCHEDULING: called just before the machine frees the finished lots
+;;  @input    -
+;;  @returns  -
+;;  @context  machine
+;;
+to algo-move-out-hormone
+  
+  let pt [m.production_time] of self
+  
+  ask lots-here [              ; decrease remainning rpt by prod time of this machine
+    algo-hormone-update-raw-process-time pt
+  ]
+  
+end
+
+
+;;; called once at end of each tick
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-tick-end-hormone
+  
+  ; not used in hormone algo
+  
+end
+
+
+;-------------------------------------------
+;-----------Framework Functions End---------
+;-------------------------------------------
+
+;;; returns uniformly distributed value in the given bound
+;;  @input    min-extreme max-extreme
+;;  @returns  integer
+;;  @context  -
+;;
+to-report algo-uniform-distribution-hormone [ min-extreme max-extreme ]					; uniform distributed values between specified min and max
+	let r random (max-extreme - min-extreme + 1) + min-extreme
+	report r
+end
+
+
+;-----------------------------------
+; -----------Links Start------------
+;-----------------------------------
+
+;;; parses the upstream links in each recipe and save the values in a table
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-hormone-parse-links
+  
+  let link_list table:make
+  
+  
+  foreach lots_list [ curr_lot ->
+    let recipe [l.recipe] of curr_lot
+    
+    let rev_recipe reverse recipe
+    
+    let i 0
+    
+    while [ i < length rev_recipe - 1] [
+      
+      let m_from item (i) rev_recipe
+      let m_to   item (i + 1) rev_recipe
+      
+      let key (word m_from " " m_to)
+      
+      let strength table:get-or-default link_list key 0      ; get current link strength
+      
+      set strength strength + 1
+      
+      table:put link_list key strength
+      
+      set i i + 1
+      
+    ]
+    
+  ]
+  
+  table:put swarm_table "UPSTREAM_LINKS_TABLE" link_list
+;  set UPSTREAM_LINKS_TABLE link_list
+  
+end
+
+
+;;; gets the link between two machines
+;;  @input    2 machines
+;;  @returns  the link value >= 0 - integer
+;;  @context  -
+;;  example: algo-hormone-get-link "k" "k"
+to-report algo-hormone-get-link [ m_link_from m_link_to ]
+  
+  let key (word m_link_from " " m_link_to)
+  
+  let UPSTREAM_LINKS_TABLE table:get swarm_table "UPSTREAM_LINKS_TABLE"
+  
+  report table:get-or-default UPSTREAM_LINKS_TABLE key 0
+  
+end
+
+
+;---------------------------------
+; -----------Links End------------
+;---------------------------------
+
+
+;--------------------------------------
+; -----------Hormones Start------------
+;--------------------------------------
+
+;;; updates hormone values in every machine
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-hormone-update-hormones								    	                      ; update hormones for all machines
+  
+  ask machines [
+    algo-hormone-produce-hormones 						                      ; produce hormones at a machine based on number of lots in queue
+    algo-hormone-decay-hormones							                        ; decay hormones of a given machine
+    algo-hormone-hormones-diffuse-upstream 				                  ; diffuse hormones upstream based on links
+  ]
+  
+end
+
+
+;;; produce hormones in a specific machine
+;;  @input    -
+;;  @returns  -
+;;  @context  machine
+;;
+to algo-hormone-produce-hormones														        ; produces hormones based on queue length at specific machine
+  
+  let q m.queue
+  let q_len 0
+  let BETA table:get swarm_table "BETA"
+  
+  ifelse (m.batch_size = 1) [ set q_len length [q.lotlist] of q ] [ set q_len tablequeue-get-total-length ]
+  
+  let currentHormone table:get m.swarm_table "hormoneAmount"
+  table:put m.swarm_table "hormoneAmount" currentHormone + (1 / ( q_len + BETA))
+  
+end
+
+
+;;; decay hormones in a specific machine
+;;  @input    -
+;;  @returns  -
+;;  @context  machine
+;;
+to algo-hormone-decay-hormones      														    ; decay hormones at specific machine based on factor alpha
+  
+  let ALPHA table:get swarm_table "ALPHA"
+  let currentHormone table:get m.swarm_table "hormoneAmount"
+  table:put m.swarm_table "hormoneAmount" currentHormone * (1 - ALPHA)
+
+end
+
+
+;;; diffuse hormones upstream starting from a specific machine
+;;  @input    -
+;;  @returns  -
+;;  @context  machine
+;;
+to algo-hormone-hormones-diffuse-upstream 										      ; diffuse hormones upstream
+  
+  let m_from_type m.machine_type
+  let M_TYPES_LIST table:get swarm_table "M_TYPES_LIST"
+  let GAMMA table:get swarm_table "GAMMA"
+  
+  foreach n-values length M_TYPES_LIST [ i -> i ] [ idx ->									                                  ; For every MACHINE_TYPES
+    
+    let m_to_type item idx M_TYPES_LIST
+    
+    let link_strength_sum 0
+    
+    foreach n-values length M_TYPES_LIST [ i -> i ] [ idx2 ->
+      
+      let m_to_type_new item idx2 M_TYPES_LIST
+      
+      let link_var algo-hormone-get-link m_from_type m_to_type_new
+      
+      if link_var != 0 [
+        set link_strength_sum  link_strength_sum + link_var
+      ]
+    ]
+    
+    if algo-hormone-get-link m_from_type m_to_type != 0 [
+      
+      let upstream_hormone (table:get m.swarm_table "hormoneAmount" * GAMMA)	       		       		  ; upstream_hormone = hormone_amount of machine * GAMMA
+      
+      table:put m.swarm_table "hormoneAmount" ((table:get m.swarm_table "hormoneAmount") - upstream_hormone)      ; remove hormones that diffuse upstream
+
+      
+      let link_strength algo-hormone-get-link m_from_type m_to_type
+      
+      
+      
+      
+      let added_hormone upstream_hormone * (link_strength / link_strength_sum)
+      
+      set added_hormone (added_hormone / (count machines with [m.machine_type = m_to_type]))
+      
+      ask machines with [m.machine_type = m_to_type] [ table:put m.swarm_table "hormoneAmount" ((table:get m.swarm_table "hormoneAmount") + added_hormone)]                 ; add added-hormone to hormone_amount
+    		]
+  	]
+  
+end
+
+;;; Not yet implemented can only efficiently be used in scheduling mode
+;;; diffuse hormones upstream when a lot arrives at a certain machine
+;;  @input    a lot
+;;  @returns  -
+;;  @context  -
+;;  (TODO)
+;to algo-hormone-lot-diffuse-hormone [ lot_num ]            ; diffuses hormones FOR MACHINE TYPES NOT INDIVIDUAL MACHINES --> MAYBE CHANGE? NEED SWARM LIST WITH PREV_MACHINE AND CURR_MACHINE --- IMPORT ONLY CALL THIS FUNCTION WHEN LOT ARRIVES AT NEW MACHIEN!!!!
+;  
+;  
+;  
+;end
+
+;------------------------------------
+; -----------Hormones End------------
+;------------------------------------
+
+
+
+;---------------------------------------------
+;---------Process Time, Priority Start--------
+;---------------------------------------------
+
+;;; set the initial rpt value for the specified lot
+;;  @input    lot number
+;;  @returns  -
+;;  @context  -
+;;
+to algo-hormone-set-initial-rpt [ lot_num ]
+  
+  let rpt 0
+  let recipe [l.recipe] of lot lot_num
+  foreach recipe [ recipe_num ->
+    let m one-of machines with [m.machine_type = recipe_num]
+    set rpt rpt + [m.production_time] of m
+  	]
+  
+;  ask lot lot_num [ table:put l.swarm_table "initial_rpt" rpt ]     ;; (optional) can be used to calculate tardiness and flow factor
+  ask lot lot_num [ table:put l.swarm_table "remaining_rpt" rpt ]
+  
+end
+
+
+;;; reduces the rpt of a lot by the time it has been processed
+;;  @input    process time passed
+;;  @returns  -
+;;  @context  -
+;;
+to algo-hormone-update-raw-process-time [ pt ]
+  
+  let rpt  table:get l.swarm_table "remaining_rpt"
+  
+  set rpt (rpt - pt)
+
+  table:put l.swarm_table "remaining_rpt" rpt
+  
+end
+
+
+;;; get the pct value for the specified lot
+;;  @input    lot number
+;;  @returns  float
+;;  @context  -
+;;
+to-report algo-hormone-get-pct [ lot_num ]
+
+  let pct (table:get [l.swarm_table] of lot lot_num "remaining_rpt") * (2.5)		        
+  
+  report pct
+  
+end
+
+
+;;; get the base priority value for the specified lot
+;;  @input    lot number
+;;  @returns  float
+;;  @context  -
+;;
+to-report algo-hormone-get-base-priority [ lot_num ]              ; updates base priority (-> updates rpt and pct automatically dont need to be called in advance)
+  
+  let remaining_PCT algo-hormone-get-pct lot_num
+  let remaining_RPT (table:get [l.swarm_table] of lot lot_num "remaining_rpt")                                      
+  
+;  ask lot lot_num [ table:put l.swarm_table "base_priority" (remaining_RPT / remaining_PCT) ]
+  
+  let base_priority (remaining_RPT / remaining_PCT)
+  report base_priority
+  
+end
+
+
+;;; get the attraction value for the specified lot
+;;  @input    lot number
+;;  @returns  float
+;;  @context  -
+;;
+to-report algo-hormone-get-attraction [ lot_num ]                               
+
+  let curr_lot lot lot_num
+  let curr_recipe_pointer ([l.recipe_pointer] of curr_lot)
+  let curr_recipe ([l.recipe] of curr_lot)
+  let EPSILON table:get swarm_table "EPSILON"
+  
+  let attraction 0
+  let counter curr_recipe_pointer
+  
+  repeat ( (length curr_recipe) - curr_recipe_pointer - 1) [
+    
+    let m_type_i (item counter curr_recipe)
+    
+    let hormone_at_i (table:get ([m.swarm_table] of one-of machines with [m.machine_type = m_type_i]) "hormoneAmount")
+    
+    set attraction (attraction + (hormone_at_i * EPSILON ^ (counter - curr_recipe_pointer) ) )
+    
+    set counter (counter + 1)
+    
+  ]
+
+;  ask curr_lot [ table:put l.swarm_table "attraction" attraction ]
+  report attraction
+  
+end
+
+
+;;; updates the priority of all alive lots
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-hormone-update-priority
+
+  let alive_lots []
+  set alive_lots sort-on [who] lots                      ; list of lot agents
+  
+  let lot_num 0
+  foreach alive_lots [ curr_lot ->
+    set lot_num [who] of curr_lot
+    
+    let base_priority algo-hormone-get-base-priority lot_num
+    let attraction algo-hormone-get-attraction lot_num
+    
+    let prio (base_priority * attraction)
+    ask curr_lot [ table:put l.swarm_table "priority" prio  ]
+  ]
+  
+end 
+
+;-------------------------------------------
+;---------Process Time, Priority End--------
+;-------------------------------------------

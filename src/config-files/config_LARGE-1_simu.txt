@@ -1,0 +1,15 @@
+;; **** LARGE SIZE, generated with:
+;; MT = 100, NOM_MIN = 3, NOM_MAX = 20
+;;
+;; TIME_MU = 1.16, TIME_SIG = 0.57
+;; B_PROB = 50, BS_MIN = 2, BS_MAX = 8
+;; WT_MIN = 1, WT_MAX = 2
+;;
+;; NUM_PROD = 100
+;; RLENGHT_MIN = 200, RLENGTH_MAX = 250
+;; NOL_MIN = 2, NOL_MAX = 20
+;;
+;; cols = [ TYPE FILENAME ]
+MFILE config_LARGE-1_machines.txt
+RFILE config_LARGE-1_recipes.txt
+LFILE config_LARGE-1_lots.txt

@@ -1,0 +1,4 @@
+;; cols = [ TYPE FILENAME ]
+MFILE config_ICAART_machines.txt
+RFILE config_ICAART_recipes.txt
+LFILE config_ICAART_lots.txt

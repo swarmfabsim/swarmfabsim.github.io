@@ -1,0 +1,239 @@
+;; SWILT WP 3 simple fab simulation - functions & definitions for machines
+;; -----------------------------------------------------------------------
+;;
+
+
+;;; ----- Create MACHINES from TABLE_M from config file ----
+;;  @input    new version of
+;;            TABLE_M: [ [ 1 [2 0.5 1 1.12] ]  [ 2 [1 0 2 0.68] ] ... ]
+;;                 keys = PID 1...10, 20
+;;                 values = [BS WT NOM TIME]
+;;
+;;  @result   machines_list with all created machine agents
+;;  @returns  -
+;;  @context  -
+;;
+to setup-machines-config-file
+  
+  let table_length_m table:length TABLE_M
+  if VIS? [                                                     ; only set machine pos when visualization is ON
+    if ( 2 + (table_length_m - 1) * 4 > max-pycor  ) [          ; checks if there's enough height for this number of machine types in the world
+      user-message ( word "Too many machine types for this world size. Must be less or equal " floor ((max-pycor - 2) / 4 + 1) " Stopping program." )
+      stop
+    ]
+  ]
+  
+  let prototypes_list []                                        ; list with all initial prototype machines for later queue creation
+  let i 0                                                       ; counter for ith prototype, needed for ycor calculation
+  foreach table:keys TABLE_M [ m ->                             ; table key m = PID / machine type
+    let curr_machine_values table:get TABLE_M m                 ; gets the list of values: [BS WT NOM TIME]
+    let curr_NOM (item 2 curr_machine_values)                   ; how many machines of this type? (incl prototype)
+    
+    create-machines 1 [                                         ; create a prototype machine for each table entry
+                                                                ;----- first set all technical attributes
+      set m.machine_type m                                      ; key = PID
+      set m.batch_size (item 0 curr_machine_values)             ; BS
+      if m.batch_size < 1 [user-message (word "ILLEGAL BATCHSIZE ERROR for MACHINE with PID " m.machine_type)]  ; sanity check
+      set m.max_wait_batch 0                                    ; default value
+      set m.max_wait_batch (item 1 curr_machine_values)         ; WT for batch machines, ignored on single machines      
+      set m.wait_timer 0                                        ; reset timer for max_wait_batch (counts up)      
+      set m.production_time (item 3 curr_machine_values)        ; TIME, TODO: refactor here to add time distributions
+      set m.production_time_counter m.production_time           ; reset timer (counts down)
+      set m.occupied? FALSE                                     ; no lot(s) in machine
+      set m.utilization_ticks 0                                 ; machine utilization
+      set m.lots_here no-turtles                                ; agentset of lot(s) currently being processed (single step + batch machines)
+ 
+      set size 2                                                ;----- now init definitions for visualization
+      setxy 1 2
+      set shape "square"
+      set heading 0
+      set color ( 15 + (10 * [i] of self) )                     ; color depends on ith prototype (machine type would wrap bc of 20)
+      if VIS? [                                                 ; only set machine pos when visualization is ON
+        set ycor ycor + ( [i] of self * 4 )                     ; ycor depends on ith prototype
+      ]
+      if (m.batch_size > 1) [                                   ; different shape for batch machines
+        set shape "batch_machine"
+      ]
+      set i i + 1                                               ; ith prototype, needed for ycor calc
+      
+      set prototypes_list lput self prototypes_list             ; remember this prototype for later queue creation
+      if DEBUG? [print (word "    Created machine: " m ":" curr_machine_values)]
+      
+      let j 0
+      while [j < curr_NOM - 1][                                 ; hatch an additional (NOM - 1) machines (needs machine context, therefore inside create-machines)
+        hatch 1 [ 
+          if VIS? [                                             ; only set machine pos when visualization is ON
+            set heading 90
+            while [ count machines-here != 1 ] [                ; moves foward (right) until there is no other machine on that patch or end of world
+              ifelse (( pxcor + 2 ) > max-pxcor ) [ user-message "Too many machines of one type, increase world width. Stopping program." stop ]
+              [fd 2]
+            ]
+          ]
+        ]                                                      
+        set j j + 1
+      ]      
+      
+    ]                                                           ; end create-machines
+  ]                                                             ; end foreach
+  
+  set machines_list []
+  set machines_list sort-on [ who ] machines                    ; machine list created with all machines sorted by number in it
+  if DEBUG? [print (word "*** Machines ***" machines_list)]
+  
+  ; queue creation after machine creation is complete
+  ; so as not to have discontinuous who numbers  
+  ifelse (allocation-strategy = "dispatching") [
+    
+    foreach prototypes_list [ m ->                              ; DISPATCHING: create 1 queue per machine type, all of same type share a queue  
+      let qu ""
+      
+      create-queues 1 [                                          
+        set q.mtype [m.machine_type] of m
+        set q.color [color] of m
+        ifelse [m.batch_size] of m = 1 [                        ; single step machine -> simple list queue
+          set q.isbatch? FALSE
+          set q.lotlist []
+        ][                                                      ; batch machine -> tablequeue
+          set q.isbatch? TRUE
+          set q.lotlist table:make
+        ]
+        set qu self
+        
+        hide-turtle                                             ; we don't visualize the queues
+      ]
+      
+      let m_set machines with [m.machine_type = [m.machine_type] of m]  ; agent set of all machines of this type      
+      ask qu [
+        set q.machines sort m_set                               ; add list of all machine agents of this type, sorted by who number
+        if DEBUG? [print (word "    Machine in Queue: " [who] of self " : " q.machines)]
+      ]
+      
+      ask m_set [        
+        set m.queue qu                                          ; add this queue to all machines of this type
+        if DEBUG? [print (word "    Queue in Machine: " [who] of self " : " m.queue)]              
+      ]                    
+    ]
+    
+  ][                                                            ; SCHEDULING: create 1 queue per machine
+    
+    foreach machines_list [ m ->
+      let qu ""                                                 ; for temp storage of queue
+      
+      create-queues 1 [
+        set q.mtype [m.machine_type] of m
+        set q.color [color] of m
+        ifelse [m.batch_size] of m = 1 [                        ; single step machine -> simple list queue
+          set q.isbatch? FALSE
+          set q.lotlist []
+        ][                                                      ; batch machine -> tablequeue
+          set q.isbatch? TRUE
+          set q.lotlist table:make
+        ]
+        
+        set q.machines lput m []                                ; add single machine to list
+        if DEBUG? [print (word "    Machine in Queue: " [who] of self " : " q.machines)]        
+        
+        set qu self
+        
+        hide-turtle                                             ; we don't visualize the queues
+      ]
+      
+      ask m [                                                   ; add queue to list in machine
+        set m.queue qu                  
+        if DEBUG? [print (word "    Queue in Machine: " [who] of self " : " m.queue)]              
+      ]      
+    ]
+    
+  ]
+  
+end
+
+
+
+;--------------------------------------------------------------------------------------------------------------
+;;; Setup for MANUAL MODE (SLIDERS, NO config file)  ; TODO: remove? refactor? Does NOT support SCHEDULING yet, nor tablequeues (batch bug fix)
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to setup-machines
+  if ( 2 + (machine_types - 1) * 4 > max-pycor  ) [             ; check if there's enough space for this number of machine_types in the world
+    user-message ( word "Too many machine types for this world size. Must be less or equal " floor ((max-pycor - 2) / 4 + 1) " Stopping program." )
+    stop
+  ]
+  
+  create-machines machine_types [                               ; create the initial machines
+                                                                ;----- set technical attributes
+    set m.machine_type who                                      ; machine type derived from who number as quick way to generate unique types
+    set m.production_time ( 1 + random random_production_time ) ; +1 because random starts at 0 and production time must not be 0
+    set m.production_time_counter m.production_time             ; reset timer (counts down)
+    set m.batch_size 1                                          ; set default batch size of machine to 1
+    set m.lots_here []                                          ; set list with current lots in production at that machine to an empty list
+    set m.max_wait_batch max_wait_time_batch                    ; how long to wait for batch to fill up
+    set m.wait_timer 0                                          ; reset timer for max_wait_batch (counts up)      
+    set m.occupied? FALSE                                       ; no lot(s) in machine
+    set m.utilization_ticks 0                                   ; machine utilization
+    
+    set size 2                                                  ;----- set defs for visualization
+    setxy 1 2
+    set shape "square"
+    set heading 0
+    set ycor ycor + ( who * 4 )                                 ; spaces machines along y-axis in steps of 4
+    set color ( 15 + (10 * [who] of self) )
+    
+    if random 4 = 1 [                                           ; 25% chance to be a batch machine prototype
+      set m.batch_size 4     
+      set m.production_time  ( 1 + random random_production_time ) * m.batch_size ; production time has to be 4 times as long because 4 products
+                                                                                  ; are being processed at the same time, TODO: check - really correct?
+      set shape "batch_machine" 
+    ]
+  ]
+  
+  let prototypes_list []
+  set prototypes_list sort-on [ who ] machines                  ; list with all initial prototype machines
+  
+  while [ count machines < total_machine_count ] [              ; creates machines until max number is hit and spaces them out in the factory
+    foreach prototypes_list [
+      m ->
+      ask m [
+        if m.batch_size = 1 [
+          if random 2 = 1 [                                     ; 50% chance of creating another single machine (iterates until there is the set number of machines)
+            hatch 1 [
+              set heading 90                                    ; machine faces right
+              while [ count machines-here != 1 ] [              ; moves foward (right) until there is no other machine on that patch or end of world
+                ifelse (( pxcor + 2 ) > max-pxcor ) [ user-message "Too many machines of one type, increase world width. Stopping program." stop ]
+                                                    [ fd 2 ]
+              ]
+            ]
+          ]
+        ]
+        
+        if m.batch_size = 4 [
+          if random 4 = 1 [                                     ; 25% chance of creating another batch machine
+            hatch 1 [
+              set heading 90
+              while [ count machines-here != 1 ] [              ; moves foward (right) until there is no other machine on that patch or end of world
+                ifelse (( pxcor + 2 ) > max-pxcor ) [ user-message "Too many machines of one type, increase world width. Stopping program." stop ]
+                                                    [ fd 2 ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    ]
+  ]
+  
+  set machines_list []                                                            
+  set machines_list sort-on [ who ] machines                    ; machine list with all machines sorted by who number
+  
+  foreach prototypes_list [ m ->                                ; queue creation after machine creation is complete
+                                                                ; so as not to have discontinuous who numbers
+    create-queues 1 [                                           ; create 1 queue per machine type, all machines of same type share a queue
+      set q.mtype [m.machine_type] of m
+      set q.color [color] of m
+      set q.lotlist []
+      hide-turtle                                               ; we don't visualize the queues
+    ]
+  ]
+  
+end

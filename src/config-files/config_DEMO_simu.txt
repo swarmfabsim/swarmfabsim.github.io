@@ -1,0 +1,5 @@
+;; Simulation config file - groups set of all config files
+;; cols = [ TYPE FILENAME ]
+MFILE config_DEMO_machines.txt
+RFILE config_DEMO_recipes.txt
+LFILE config_DEMO_lots.txt

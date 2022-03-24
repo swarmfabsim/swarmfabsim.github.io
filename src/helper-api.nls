@@ -1,0 +1,376 @@
+;; This file implements helper functions that swarm algorithm implementers can use
+;; These functions are not part of the mandatory API but for the convenience of implementers;
+;; their use is strongly encouraged, though!
+;; The mandatory API is defined in hooks.nls
+;;
+;; SWILT-Simulation.nlogo -> helper-api.nls
+;;
+;; Included from main simulation file; you do NOT have to include it from 
+;; your algorithm-XXX.nls file
+;;
+;; Documentation shows if the function has to be called from a certain 
+;; context (eg. lot, machine, queue). Eg. "lot context" would mean that
+;; this helper function must be called from inside a block of 
+;; ask lot [ 
+;;   ... function call here ... 
+;; ]
+;;       
+
+
+;;; Get the queue agent for a machine
+;;  @input    the machine
+;;  @returns  the queue agent (NOT q.lotlist!) attached to this machine
+;;  @context  -
+;;
+to-report get-queue [ m ]    
+  report [ m.queue ] of m
+end
+
+
+
+;;; For use in SCHEDULING: get the machine attached to a queue
+;;  @input    the queue
+;;  @returns  the first machine attached to this queue, which in SCHEDULING is the only machine
+;;  @context  -
+;;
+to-report get-machine [ q ]  
+  report first [ q.machines ] of q
+end
+
+
+
+;;; For use in DISPATCHING: get all machines attached to a queue
+;;  @input    the queue
+;;  @returns  list of machine agents attached to this queue
+;;  @context  -
+;;
+to-report get-machines [ q ]
+  report [ q.machines ] of q
+end
+
+
+
+;;; Remove a lot from a simple list queue (for single step machines)
+;;  @input    the queue agent and lot agent to remove
+;;  @returns  -
+;;  @context  -
+;;
+to remove-lot-from-queue [ q l ]
+  ask q [                              
+    set q.lotlist remove l q.lotlist                    ; shorten queue
+  ]                  
+end
+
+
+
+;;; Get max length of the sub-queues of a batch machine
+;;  @input    -
+;;  @returns  max length of sub-queues
+;;  @context  machine
+;;  @note     ATTN: assumes machine is batch machine! (no checking done!)
+;;
+to-report tablequeue-get-max-length
+  
+  let lengthlist (map length table:values ([q.lotlist] of m.queue) )  ; list of lengths of all sub queues
+  
+  ifelse lengthlist != [] [
+    report max lengthlist
+  ][
+    report 0 
+  ]    
+end
+
+
+
+;;; Get total length of tablequeue of a batch machine
+;;  @input    -
+;;  @returns  total length of sum of all sub-queues - this gives you the total open workload of the machine in lots
+;;  @context  machine
+;;  @note     ATTN: assumes machine is batch machine! (no checking done!)
+;;
+to-report tablequeue-get-total-length
+  
+  let lengthlist (map length table:values ([q.lotlist] of m.queue) )  ; list of lengths of all sub queues
+  
+  ifelse lengthlist != [] [
+    report reduce + lengthlist
+  ][
+    report 0 
+  ]  
+end
+
+
+
+;;; Find the type with the longest subqueue in a tablequeue
+;;  @input    -
+;;  @returns  lot type with longest sub-queue = key for tablequeue, OR -1 if table empty
+;;  @context  machine
+;;  @note     ATTN: assumes machine is batch machine! (no checking done!)
+;;
+to-report tablequeue-find-max-type
+  
+  let key -1                                        ; init illegal type
+  
+  let tabqueue [q.lotlist] of m.queue
+  let lengthlist map length (table:values tabqueue)
+  
+  if lengthlist != [] [
+    
+    let maxlength max lengthlist                    ; the overall max
+    let ind position maxlength lengthlist           ; position in lengthlist == position in key list
+    set key item ind table:keys tabqueue            ;          bc table:values and table:keys have same order
+  ]
+  
+  report key  
+end
+
+
+
+;;; Find the type with the shortest subqueue in a tablequeue
+;;  @input    -
+;;  @returns  lot type with shortest sub-queue = key for tablequeue, OR -1 if table empty
+;;  @context  machine
+;;  @note     ATTN: assumes machine is batch machine! (no checking done!)
+;;
+to-report tablequeue-find-min-type
+  
+  let key -1                                        ; init illegal type
+  
+  let tabqueue [q.lotlist] of m.queue
+  let lengthlist map length (table:values tabqueue)
+  
+  if lengthlist != [] [
+    
+    let minlength min lengthlist                    ; the overall min
+    let ind position minlength lengthlist           ; position in lengthlist == position in key list
+    set key item ind table:keys tabqueue            ;          bc table:values and table:keys have same order
+  ]
+  
+  report key  
+end
+
+
+
+;;; Find the length of the subqueue for a certain lot type
+;;  @input    lot type
+;;  @returns  subqueue length
+;;  @context  machine
+;;  @note     ATTN: assumes machine is batch machine! (no checking done!)
+;;
+to-report tablequeue-get-subQ-length-for [ lottype ]
+  
+  let n 0  
+  let tabqueue [q.lotlist] of m.queue
+  
+  if (table:has-key? tabqueue lottype) [    
+    set n length table:get tabqueue lottype
+  ]
+  
+  report n
+end
+
+
+
+;;; Find the lot type with the earliest due date in a tablequeue (untested)
+;;
+;;  ***** ATTN: due dates are not supported yet in simulation!
+;;              procedure is included as a demo for how to do something
+;;              more complicated with a tablequeue
+;;              (and for future use, ofc)
+;;
+;;  @input    -
+;;  @returns  lot type / key with the earliest due date in the tablequeue, OR -1 if table empty
+;;  @context  machine
+;;  @note     ATTN: assumes machine is batch machine! (no checking done!)
+;;
+to-report tablequeue-find-type-with-earliest-due-date
+
+  let key -1                                        ; init illegal type
+  
+  let tabqueue [q.lotlist] of m.queue
+  let lengthlist map length (table:values tabqueue)
+  
+  if lengthlist != [] [
+    
+    let minlist map [l -> min (map [i -> [l.due] of i]  l)] table:values tabqueue    ; single list with all respective min due dates
+    let minval min minlist                          ; the overall min
+    let ind position minval minlist                 ; position in minlist == position in key list
+    set key item ind table:keys tabqueue            ;          bc table:values and table:keys have same order    
+  ]
+  
+  report key
+end
+
+
+
+;;; Take a batch with the specified lottype from tablequeue of a batch machine,
+;;  
+;;  @input    lottype
+;;  @returns  agentset of the taken lots or empty
+;;  @context  machine
+;;  @result   removes the lots of the batch from the queue
+;;  @note     ATTN: assumes machine is batch machine! (no checking done!)
+;;                  takes at most m.batch_size lots, returns max available batch
+;;                  no lots of this type or empty queue, returns no-turtles
+;;
+to-report tablequeue-take-type [ lottype ]
+  
+  let lotsP no-turtles                              ; lots taken for processing - init empty set
+  
+  let tabqueue [q.lotlist] of m.queue
+  
+  if table:has-key? tabqueue lottype [
+    
+    let tempsubQ table:get tabqueue lottype 
+    
+    let n min (list m.batch_size (length tempsubQ)) ; how many lots to take: <= batchsize && <= sub queue length
+    
+    repeat n [                                      ; take a batch of size n
+      set lotsP (turtle-set lotsP first tempsubQ)   ; add to set
+      set tempsubQ remove-item 0 tempsubQ           ; remove from subqueue    
+    ]  
+
+    let key [l.lot_type] of one-of lotsP            ; update tablequeue: get key from lots
+    
+    ifelse tempsubQ = [] [                          ; list is empty -> remove the key; otherwise functions like finding the min won't work later
+      table:remove tabqueue key     
+    ][
+      table:put tabqueue key tempsubQ               ; save the reduced list != [] under that key
+    ]
+  ]
+  
+  report lotsP                                      ; the lots taken    
+end
+
+
+
+;;; Take a batch with length n from the sub-queues of a batch machine,
+;;  if there are several, choose sub-queue randomly
+;;  @input    length n
+;;  @returns  agentset of the taken lots or empty
+;;  @context  machine
+;;  @result   removes the lots of the batch from the queue
+;;  @note     ATTN: assumes machine is batch machine! (no checking done!)
+;;                  takes at most m.batch_size lots
+;;                  if n > available sub-queue size, returns max available batch
+;;                  if n = 0 or empty queue, returns no-turtles (n = 0 is typically result of empty queue)
+;;
+to-report tablequeue-take-batch-size [ n ]
+
+  let lotsP no-turtles                               ; lots taken for processing - init empty set
+  
+  let tabqueue [q.lotlist] of m.queue
+  let lengthlist map length (table:values tabqueue)
+  
+  if (n > 0) and (lengthlist != []) [                ; sanity check: only if queue is not empty
+    
+    let maxq max lengthlist                          ; limit n: don't try taking more than max sub-queue
+    set n min (list maxq m.batch_size)               ;          or batch size
+    
+    let templist filter [i -> length i >= n] (table:values tabqueue)   ; list of lists with at least this size
+    
+    if templist != [] [                              ; is there at least 1 sublist with this size?
+      
+      let i (random (length templist))               ; choose RANDOM list from list of lists
+      let tempsubQ item i templist        
+      
+      repeat n [                                     ; take batch of size n
+        set lotsP (turtle-set lotsP first tempsubQ)  ; add to set
+        set tempsubQ remove-item 0 tempsubQ          ; remove from subqueue    
+      ]  
+      
+      let key [l.lot_type] of one-of lotsP           ; update tablequeue: get key from lots
+      
+      ifelse tempsubQ = [] [                         ; list is empty -> remove the key; otherwise functions like finding the min won't work later (they don't work on empty lists)
+        table:remove tabqueue key     
+      ][
+        table:put tabqueue key tempsubQ              ; save the reduced list != [] under that key
+      ]
+    ]
+  ]
+  
+  report lotsP                                       ; the lots taken    
+end
+
+
+
+;;; Change the lot status of a set of lot(s), for both, single step and batch machines
+;;  @input    lotset ... agentset of lot(s) - (never a single lot agent!)
+;;            status ... = {"processing", "queued", "free"}
+;;  @returns  -
+;;  @context  -
+;;
+to change-lot-status [ lotset status ]
+  ask lotset [     
+    if status = "processing" [
+      set l.queued? false
+      set l.processing? true
+    ]
+    if status = "queued" [
+      set l.queued? true
+      set l.processing? false
+    ]
+    if status = "free" [
+      set l.queued? false
+      set l.processing? false
+    ]
+  ]
+end
+
+
+
+;;; Get the next process step in a lot's recipe
+;;  @input    the lot
+;;  @returns  the next process step (PID number)
+;;  @context  -
+;;  @note     only reads next step, does NOT move the recipe pointer!
+;;
+to-report get-next-process-step [ l ]
+  let process_step ""                                
+  
+  ask l [
+    set process_step (item l.recipe_pointer l.recipe)   ; next step in recipe 
+  ]
+  
+  report process_step
+end
+
+
+
+;;; Move the chosen lots into the machine and update machine & lot statuses
+;;  @input    agentset with lot(s) - never a single lot
+;;  @returns  -
+;;  @context  machine
+;;
+to move-in [ l ]
+  set m.lots_here l
+  change-lot-status m.lots_here "processing"
+  set m.occupied? TRUE      
+end 
+
+
+
+;;; DEBUG helper function - prints queue contents (who numbers of lots) for simple and tablequeue
+;;  @input    the queue agent(!) of the queue to print (NOT q.lotlist)
+;;  @returns  -
+;;  @context  -
+;;  
+to showqueue [ q ]
+  
+  ask q [
+    ifelse q.isbatch? [                                   ; tablequeue
+      
+      print (word "*** TABLEQUEUE: " who)
+      let tabqueue q.lotlist
+      foreach table:keys tabqueue [ k ->
+        let v table:get tabqueue k
+        ;print (word k " : " v)
+        print (word k " : " map [l -> [who] of l] v)        
+      ]    
+    ][                                                    ; simple list queue
+      print (word "*** SIMPLE QUEUE: " who)    
+      print map [l -> [who] of l] q.lotlist
+    ]
+  ]
+end
+

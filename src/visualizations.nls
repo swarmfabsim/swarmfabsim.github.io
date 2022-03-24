@@ -1,0 +1,154 @@
+;; SWILT WP 3 simple fab simulation - functions & definitions for visualization
+;; ----------------------------------------------------------------------------
+;;
+
+
+;-------------------------------------------plotting-----------------------------------------------------------
+;;; Plots into plot window named "Plot"; ATTN: this plot window must exist in the UI
+;;  Plot
+;;  @input    mode: "stats"... plots overall stats  = avg, max, min queue lengths in fab
+;;                  "separate"... plots every queue length separately (only useful in dispatching mode)
+;;  @returns  -
+;;  @context  -
+;;
+to do-plotting [ mode ]
+  
+  set-current-plot "Plot"                                      ; ATTN: a plot window with this name must exist in the UI
+  
+  ifelse mode = "stats" [                                      ; plot overall stats: avg, max, min queue lengths in fab
+    
+    let pname "avg"
+    create-temporary-plot-pen pname
+    set-current-plot-pen pname
+    set-plot-pen-color black
+    plot avg_queue_length
+    
+    set pname "max"
+    create-temporary-plot-pen pname
+    set-current-plot-pen pname
+    set-plot-pen-color red
+    plot max_queue_length  
+    
+    set pname "min"
+    create-temporary-plot-pen pname
+    set-current-plot-pen pname
+    set-plot-pen-color blue
+    plot min_queue_length
+    
+  ][                                                           ; plot every queue separately (only useful in dispatching mode)
+
+    ask queues [
+      let pname (word "Q-" q.mtype)                            ; pen name = "Q-X", where X = machine type
+      create-temporary-plot-pen pname
+      set-current-plot-pen pname
+      set-plot-pen-color q.color                               ; color = same as machine
+      
+      ifelse q.isbatch? [                                      ; batch machine queue
+        ask first q.machines [                                 ; calculate once per queue, regardless of no of machines in dispatching mode
+          plot tablequeue-get-total-length                     ; but tablequeue function is machine context, therefore called from machine
+        ]
+      ][                                                       ; single machine queue
+        plot length q.lotlist
+        if DEBUG? [ print (word "Q-" q.mtype ":" q.lotlist )]
+      ]      
+    ]
+    
+  ]
+end
+
+
+
+;-------------------------------------------animation----------------------------------------------------------
+;;; Visualize lot(s) moving machine - SINGLE STEP & BATCH
+;;  @input    m ... machine agent, 
+;;            l ... agentset of lot(s), ATTN: always agentset, NOT just a single lot in single step machine case
+;;  @returns  -
+;;  @context  -
+;;
+to vis-move-to-machine [ m l ]
+  
+  let x [xcor] of m
+  let y [ycor] of m
+  
+  ifelse [m.batch_size] of m = 1 [                             ; single step machine -----
+    ask l [
+      pendown
+      face patch x y
+      move-to m
+      penup
+    ]
+  ][                                                           ; batch machine ------    
+    let painted 0
+    
+    ask l [
+      pendown
+      face patch x y
+      move-to m
+      penup
+      
+                                                               ; variadic ifelse, needs Netlogo 6.1+
+      (ifelse painted = 0 [                                    ; top left corner
+        set heading 0 fd 0.5 left 90 fd 0.5 set heading 0
+        set painted painted + 1
+        ]
+        painted = 1 [                                          ; top right corner
+          set heading 0 fd 0.5 right 90 fd 0.5 set heading 0
+          set painted painted + 1
+        ]
+        painted = 2 [                                          ; bottom left corner
+          set heading 0 fd -0.5 right 90 fd -0.5 set heading 0
+          set painted painted + 1
+        ]
+        painted = 3 [                                          ; bottom right corner
+          set heading 0 fd -0.5 right 90 fd 0.5 set heading 0
+          set painted painted + 1
+        ][
+          ; BS > 4, do nothing = leave lots in middle of machine        
+      ])
+      
+    ]
+  ]
+end
+
+
+
+;;; Visualize lot moving to queue; assumes machines with same PID are on same lines,
+;;  all queues for these machines are 2 below (we don't visualize queues exactly below
+;;  the respective machine in SCHEDULING mode)
+;;  @input    queue
+;;  @returns  -
+;;  @context  lot
+;;
+to vis-move-to-queue [ q ]                                                   ; move to queue pure visualization  
+  pendown
+  let x 0.4
+  let m one-of machines with [ m.machine_type = [ q.mtype ] of q ]           ; assume machines with same PID are on same line
+  let y [ycor] of m - 2                                                      ; queue is 2 below associated machines
+  face patch x y                                                             ; queue starts at same xcor as first machine in line
+  setxy x y
+  penup
+  set heading 90                                                             ; faces right (90 degrees)
+  while [count lots-here != 1] [ fd 1 ]                                      ; as long as lot is on same patch moves one more patch forward (to the right)
+end
+
+
+
+;;; Visualize lot moving to end / finish production
+;;  @input    x y coords for end
+;;  @returns  -
+;;  @context  lot
+;;
+to vis-move-to-end [ x y ]                                                   ; if lot is done processing move out of factory
+  pendown
+  face patch x y
+  setxy x y
+  penup
+end
+
+
+
+; just for info
+; for batches visual --> ask lot XX [ fd 0.5 left 90 fd 0.5 set heading 0] moves lot to top left corner
+; for batches visual --> ask lot XX [ fd 0.5 right 90 fd 0.5 set heading 0] moves lot to top right corner
+; for batches visual --> ask lot XX [ fd -0.5 right 90 fd -0.5 set heading 0] moves lot to bottom left
+; for batches visual --> ask lot XX [ fd -0.5 right 90 fd 0.5 set heading 0] moves lot to bottom right

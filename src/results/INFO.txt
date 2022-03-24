@@ -1,0 +1,10 @@
+INFO about *-kpis.csv FILEFORMAT
+================================
+
+[run number] [avg ff] [avg tard] [avg util]
+
+ff ... flow factor of lots
+tard ... tardiness of lots
+util ... machine utilization
+
+Averaged values over the course of the whole run.

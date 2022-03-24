@@ -1,0 +1,15 @@
+;; **** SFAB-10000 = SFAB + 10000 LOTS, generated with:
+;; MT = 25, NOM_MIN = 2, NOM_MAX = 5
+;;
+;; TIME_MU = 1.16, TIME_SIG = 0.57
+;; B_PROB = 50, BS_MIN = 2, BS_MAX = 8
+;; WT_MIN = 1, WT_MAX = 2
+;;
+;; NUM_PROD = 100
+;; RLENGHT_MIN = 90, RLENGTH_MAX = 110
+;; NOL_MIN = 10, NOL_MAX = 190
+;;
+;; cols = [ TYPE FILENAME ]
+MFILE config_SFAB-10000_machines.txt
+RFILE config_SFAB-10000_recipes.txt
+LFILE config_SFAB-10000_lots.txt

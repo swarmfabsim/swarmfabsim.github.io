@@ -1,0 +1,15 @@
+;; **** SFAB = SMALLER FAB + MEDIUM LOTS, generated with:
+;; MT = 25, NOM_MIN = 2, NOM_MAX = 5
+;;
+;; TIME_MU = 1.16, TIME_SIG = 0.57
+;; B_PROB = 50, BS_MIN = 2, BS_MAX = 8
+;; WT_MIN = 1, WT_MAX = 2
+;;
+;; NUM_PROD = 50
+;; RLENGHT_MIN = 90, RLENGTH_MAX = 110
+;; NOL_MIN = 1, NOL_MAX = 10
+;;
+;; cols = [ TYPE FILENAME ]
+MFILE config_SFAB_machines.txt
+RFILE config_SFAB_recipes.txt
+LFILE config_SFAB_lots.txt

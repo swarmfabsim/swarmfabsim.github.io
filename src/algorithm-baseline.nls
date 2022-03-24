@@ -1,0 +1,160 @@
+;; this file contains the BASELINE ALGORITHM which is to be used as 
+;; the baseline for comparison with the swarm algorithms.
+;;
+;; BASELINE implements the following simple algorithm:
+;; Choosing a queue (for SCHEDULING):
+;;   *) on SINGLE STEP machines: shortest queue
+;;   *) on BATCH machines: if there are machines with less than <batchsize> lots for
+;;                         the current type - choose among them the one with the 
+;;                         least missing lots to fill the batch; if several, choose
+;;                         the one with the least overall queue length
+;;
+;; Taking from the queue: same as algorithm-basic
+;;   *) on SINGLE STEP machines: FIFO
+;;   *) on BATCH machines:  fullest batch first, if none, waits for timer to run out
+;;                          if a batch fills up in the meantime, take it
+;;                          if timeout it take the biggest available batch
+;;                          
+;;
+;; BASELINE supports both, DISPATCHING and SCHEDULING
+;;
+
+
+
+;;; Initialize the algorithm.
+;;
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-init-baseline
+  
+  if DEBUG? [print "*** BASELINE: init"]
+    
+end
+
+
+
+;;; for SCHEDULING only: algo chooses which queue
+;;
+;;  Baseline Algo implements the following:
+;;    SINGLE STEP machines: shortest queue
+;;          BATCH machines: if there are machines with less than <batchsize> lots for
+;;                          the current type - choose among them the one with the 
+;;                          least missing lots to fill the batch; if several, choose
+;;                          the one with the least overall queue length
+;;
+;;  @input    the lot to be queued
+;;  @returns  the chosen queue or nobody
+;;  @context  -
+;;
+to-report algo-choose-queue-baseline [ l ]
+  
+  let q nobody
+  
+  let lottype [l.lot_type] of l
+  let process_step get-next-process-step l                    ; next step in recipe (PID)    
+  
+  let possible_qs queues with [ q.mtype = process_step ]      ; first choose subset of possible queues
+  
+  ifelse [q.isbatch?] of one-of possible_qs [                 ; for a process step all machines are the same type (single/batch)
+                                                              ; so we can just check any one of the possible queues which type it is
+                                                              ; BATCH queue: 
+    let possible_ms map [ i -> first i ] ([q.machines] of possible_qs)   ; list of all machines associated w possible queues (only 1 m/q in scheduling)
+    let bs [m.batch_size] of one-of possible_ms               ; batch size (same for all these machnes)
+    let lengthlist []                                         ; and respective list of subqueue lengths for the requested lot type
+    
+    foreach possible_ms [ m -> ask m [                        ; tablequeue-get-subQ-length-for must be called from machine context
+      set lengthlist lput tablequeue-get-subQ-length-for lottype lengthlist
+      ]
+    ]                                                         ; we now have the subqueue lengths for our lot type for all possible queues/machines
+
+    let modlist map  [i -> i mod bs] lengthlist               ; subqueue mod batchsize for every machine
+    let fill bs - 1                                           ; places to fill in batch, first try machines /w 1 open place, then 2, etc
+    let ind -1                                                ; index of first machine/subqueue with this many places to fill in batch
+
+    while [fill > 0] [
+      ifelse member? fill modlist [                           ; there is a partially filled batch          
+        set ind position fill modlist                         ; index of first such batch in the list ==
+        let ma item ind possible_ms                           ; == machine at that index in machine list
+        set q [m.queue] of ma                                 ; this is the queue we choose; remember for return      
+        set fill 0                                            ; end the loop - done
+      ][
+        set fill fill - 1
+      ]
+    ]    
+
+    if q = nobody [                                           ; NO machine with partially filled batch found -> use shortest total tablequeue
+
+      let totallist []                                        ; total tablequeue lengths
+      foreach possible_ms [ m -> ask m [                      ; tablequeue-get-total-length-for must be called from machine context
+        set totallist lput tablequeue-get-total-length totallist
+        ]
+      ]                                                       ; we now have the total lengths of the tablequeues for all possible machines
+      
+      let minval min totallist                                ; shortest total tablequeue length of all
+      set ind position minval totallist                       ; index in totallist == index in machine list =>
+      let ma item ind possible_ms                             ; the machine at that index == the one with the shortest total tablequeue =>
+      set q [m.queue] of ma                                   ; this is the queue we choose; remember for return            
+    ]
+        
+  ][                                                          ; SINGLE queue
+    set q min-one-of possible_qs [ length q.lotlist ]         ; choose randomly one of the queues from those with shortest queue length                                                              
+  ]
+  
+  report q
+  
+end
+
+
+;;; SAME for DISPATCHING and SCHEDULING: called when the machine decides which lot to take from the queue
+;;
+;;  Baseline Algo does the same as Basic Algo since it does not manipulate the order in the queue.
+;;  FIFO queue for single step,
+;;  fullest batch for batch machines
+;;  see algo-take-from-queue-basic for full description
+;;            
+;;  @input    machine
+;;  @returns  agentset of the taken lot(s) or empty agentset (no-turtles)
+;;  @context  machine
+;;
+to-report algo-take-from-queue-baseline [ m ]
+  
+  report algo-take-from-queue-basic m                         ; code re-use: FIFO queue
+  
+end
+
+
+
+;;; for DISPATCHING and SCHEDULING: called just before the machine frees the finished lots
+;;  @input    -
+;;  @returns  -
+;;  @context  machine
+;;
+to algo-move-out-baseline
+  
+  ; not used in demo algo
+  
+end
+
+
+
+;;; called once at start of each tick
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-tick-start-baseline
+  ; not used  
+end
+
+
+
+;;; called once at end of each tick
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-tick-end-baseline
+  ;not used
+end

@@ -1,0 +1,214 @@
+;; this file is a DEMO ALGORITHM which shows how to use the hook API and the
+;; helper functions from helper-api.nls to implement a basic algorithm
+;;
+;; use this as inspiration when implementing a swarm algorithm
+;;
+;; ATTN: all algorithm-functions should be preceeded by "algo" for namespace reasons
+;;       your new algorithm should use the followin naming scheme for functions:
+;;       algo-*-<name>
+;;
+
+
+
+;;; Initialize the algorithm. DEMO of X.swarm_table setup. For usage see algo-tick-end.
+;;
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-init-demo
+  
+  if DEBUG? [print "*** ALGO: init"]
+  
+  ask machines [                                              ; make new swarm tables in all machines
+    let ttemp table:make                                      ; create a temporary table & fill
+    table:put ttemp "key1" 1                                  ; examples of how to put something into table
+    table:put ttemp "key2" [1 2 3]
+    set m.swarm_table ttemp                                   ; store in machine
+  ]
+  
+  table:put swarm_table "varname1" "some value"               ; demo usage of global swarm_table (this table is already created in the main simu/setup)
+  table:put swarm_table "varname2" 57                         ; use the keys like you would use variable names and store your values
+  table:put swarm_table "varname3" [4 5 6]
+  table:put swarm_table "varname4" false
+  
+end
+
+
+
+;;; for SCHEDULING only: algo chooses which queue, using shortest queue length
+;;  @input    the lot to be queued
+;;  @returns  the chosen queue or nobody
+;;  @context  -
+;;
+to-report algo-choose-queue-demo [ l ]
+  
+  let q nobody
+  
+  let lottype [l.lot_type] of l
+  let process_step get-next-process-step l                    ; next step in recipe (PID)    
+  
+  let possible_qs queues with [ q.mtype = process_step ]      ; first choose subset of possible queues
+  
+  ifelse [q.isbatch?] of one-of possible_qs [                 ; for a process step all machines are the same type (single/batch)
+                                                              ; so we can just check any one of the possible queues which type it is
+                                                              ; BATCH queue DEMO: choose the one with the shortest subqueue for this lot type   
+
+    let possible_ms map [ i -> first i ] ([q.machines] of possible_qs)   ; list of all machines associated w possible queues (only 1 m/q in scheduling)
+    let lengthlist []                                         ; and respective list of subqueue lengths for the requested lot type
+    
+    foreach possible_ms [ m -> ask m [                        ; tablequeue-get-subQ-length-for must be called from machine context
+      set lengthlist lput tablequeue-get-subQ-length-for lottype lengthlist
+      ]
+    ]                                                         ; we now have the subqueue lengths for our lot type for all possible queues/machines
+    
+    let minval min lengthlist                                 ; shortest subqueue length of all
+    let ind position minval lengthlist                        ; index in lengthlist == index in machine list =>
+    let ma item ind possible_ms                               ; the machine at that index == the one with the shortest subqueue =>
+    set q [m.queue] of ma                                     ; this is the queue we choose; remember for return
+    
+  ][                                                          ; SINGLE queue DEMO
+    set q min-one-of possible_qs [ length q.lotlist ]         ; choose randomly one of the queues from those with shortest queue length
+                                                              ; see also with-min command for other possible options to implement this  
+  ]
+  
+  report q
+  
+end
+
+
+;;; SAME for DISPATCHING and SCHEDULING: called when the machine decides which lot to take from the queue
+;;
+;;  ATTN: batch machine waiting has to be implemented here by the algorithm
+;;        because how the machine waits for batches to fill up depends on the algo
+;;        see code from "BATCH machine - has TABLE OF SUBQUEUES" and following for an example
+;;
+;;  Demo Algo implements the following:
+;;    SINGLE STEP machines: FIFO queue, always take the  first lot
+;;          BATCH machines: the fullest batch is taken first, 
+;;                          if there is no full batch, waits for the timer to run out
+;;                          if a batch fills up in the meantime, takes it
+;;                          if it runs into timeout it takes the biggest available batch
+;;
+;;  @input    machine
+;;  @returns  agentset of the taken lot(s) or empty agentset (no-turtles)
+;;  @context  machine
+;;
+to-report algo-take-from-queue-demo [ m ]
+  
+  let l no-turtles                                            ; agentset of the taken lot(s) for return - init empty
+  
+  ask m [        
+    ifelse m.batch_size = 1 [                                 ; SINGLE STEP machine - has SIMPLE LIST as queue
+
+      let qu [q.lotlist] of m.queue      
+      if not empty? qu [                                      ; lots in queue
+        
+        let lo first qu                                       ; FIFO queue: get first lot &
+        remove-lot-from-queue m.queue lo                      ;             remove from queue
+        set l turtle-set lo                                   ; convert single lot to agentset for return (compatibility /w batch)                
+        move-in l                                             ; update machine & lot statuses for chosen lot
+
+      ]
+    ][                                                        ; BATCH machine - has TABLE OF SUBQUEUES
+
+      ifelse m.wait_timer < m.max_wait_batch [                ; look for full batch until timer runs out
+        
+        ifelse tablequeue-get-max-length >= m.batch_size [    ; FULL BATCH FOUND: take it & remember taken lots for return value                    
+          
+          set l tablequeue-take-batch-size m.batch_size       ; remove from queue & remember for return
+          move-in l                                           ; update machine & lot statuses for chosen lots          
+          set m.wait_timer 0                                  ; reset timer
+          
+        ][                                                    ; NO FULL BATCH: continue waiting          
+          set m.wait_timer m.wait_timer + 1
+        ]
+        
+      ][                                                      ; TIMER HAS RUN OUT -> take fullest of current batches
+        let maxlen tablequeue-get-max-length
+        
+        if maxlen > 0 [                                       ; sanity check: tablequeue not totally empty
+
+          set l tablequeue-take-batch-size maxlen             ; remove from queue & remember for return
+          move-in l                                           ; update machine & lot statuses for chosen lots          
+          set m.wait_timer 0                                  ; reset timer
+        ]
+        
+      ]                                                       ; END TIMER HAS RUN OUT      
+    ]                                                         ; END BATCH machine
+  ]  
+
+  report l                                                    ; return agentset with taken lot(s) or empty agentset
+  
+end
+
+
+
+;;; for DISPATCHING and SCHEDULING: called just before the machine frees the finished lots
+;;  @input    -
+;;  @returns  -
+;;  @context  machine
+;;
+to algo-move-out-demo
+  
+  ; not used in demo algo
+  
+end
+
+
+
+;;; called once at start of each tick
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-tick-start-demo
+  
+  if DEBUG? [print "*** ALGO: tick-start"]
+  
+  let var table:get swarm_table "varname4"                    ; this is how you read a global value from the global table
+  ;if DEBUG? [print (word "*** ALGO: global varname4 = " var) ]
+  
+end
+
+
+
+;;; called once at end of each tick
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-tick-end-demo
+  
+  if DEBUG? [print "*** ALGO: tick-end"]
+  
+  ask machines [                                              ; DEMO of X.swarm_table usage, for setup see algo-init
+    let val table:get m.swarm_table "key1"
+    set val val + 1
+    table:put m.swarm_table "key1" val    
+  ]  
+  
+end
+
+
+
+;;; called once at the very end of each tick (after algo-tick-end-demo)
+;;  demo of plotting into the UI plot window "Plot" - called when plotmode = 2
+;;  
+;;  @input    -
+;;  @returns  -
+;;  @context  -
+;;
+to algo-do-plotting-demo
+  
+  set-current-plot "Plot"                                      ; ATTN: a plot window with this name must exist in the UI
+  
+  let pname "occ. machines"
+  create-temporary-plot-pen pname
+  set-current-plot-pen pname
+  set-plot-pen-color black
+  plot count machines with [ m.occupied? ]
+  
+end
+
+
