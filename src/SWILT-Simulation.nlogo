@@ -140,7 +140,7 @@ to startup
   set plotmode "1 Overall Queuestats (avg, max, min length)"
 
   set Config_File? TRUE
-  set config_fname "config_simu.txt"
+  set config_fname "config_DEMO_simu.txt"
 
 end
 
@@ -765,7 +765,7 @@ CHOOSER
 swarm-algorithm
 swarm-algorithm
 "demo" "basic" "baseline" "hormone"
-0
+1
 
 TEXTBOX
 23
@@ -813,7 +813,7 @@ INPUTBOX
 300
 696
 config_fname
-config_DEMO_simu.txt
+simu.txt
 1
 0
 String
