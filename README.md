@@ -24,7 +24,7 @@ Install the latest version of the [Netlogo desktop app](http://www.netlogoweb.or
 
 #### Step 3
 
-Navigate to the `src` folder from your repository/download and open `SWILT-Simulation.nlogo` with NetLogo
+Navigate to the `src` folder from your repository/download and open `SwarmFab-Simulation.nlogo` with NetLogo
 
 ![Screenshot of Swarmfabsim after startup](/pics/screenshot_startup.png?raw=true "Swarmfabsim GUI")
 
