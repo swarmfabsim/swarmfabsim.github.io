@@ -16,11 +16,11 @@ this creates a directory with the repo, inclusing a folder `src`
 
 #### Step 1.b)
 
-If you don't want to use, download the repository as a .zip file and extract it
+If you don't want to use git, download the repository as a .zip file and extract it
 
 #### Step 2
 
-Install the latest version of the [Netlogo desktop app](http://www.netlogoweb.org/)
+Install the latest version of the [Netlogo desktop app](https://ccl.northwestern.edu/netlogo/download.shtml)
 
 #### Step 3
 
