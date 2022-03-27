@@ -2,7 +2,7 @@
 
 A simulator written in NetLogo for evaluating swarm-based job-shop algorithms. 
 
-The source ist available here: https://github.com/swarmfabsim
+The source ist available here: [https://github.com/swarmfabsim](https://github.com/swarmfabsim)
 
 ### Installation
 
