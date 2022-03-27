@@ -542,21 +542,6 @@ GRAPHICS-WINDOW
 ticks
 30.0
 
-SLIDER
-6
-742
-293
-775
-machine_types
-machine_types
-1
-floor ( (max-pycor - 2) / 4 + 1)
-1.0
-1
-1
-NIL
-HORIZONTAL
-
 BUTTON
 8
 129
@@ -747,16 +732,6 @@ allocation-strategy
 "dispatching" "scheduling"
 0
 
-TEXTBOX
-9
-722
-295
-740
-Manual Setup (when no config file)
-11
-0.0
-1
-
 CHOOSER
 155
 11
@@ -788,12 +763,12 @@ Dispatching or Scheduling?
 1
 
 TEXTBOX
-39
+31
 231
-268
-269
-SWILT Simulation
-28
+293
+295
+SwarmFab Simulation
+26
 0.0
 1
 
@@ -813,7 +788,7 @@ INPUTBOX
 300
 696
 config_fname
-simu.txt
+config_DEMO_simu.txt
 1
 0
 String
@@ -828,6 +803,31 @@ VIS?
 0
 1
 -1000
+
+SLIDER
+6
+742
+293
+775
+machine_types
+machine_types
+1
+floor ( (max-pycor - 2) / 4 + 1)
+1.0
+1
+1
+NIL
+HORIZONTAL
+
+TEXTBOX
+9
+722
+295
+740
+Manual Setup (when no config file)
+11
+0.0
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
