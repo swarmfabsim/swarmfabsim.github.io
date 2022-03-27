@@ -12,7 +12,7 @@ If you have git installed (recommended), then clone the repository
 
         git clone https://github.com/swarmfabsim/swarmfabsim.github.io.git
         
-this creates a directory with the repo, inclusing a folder `scr`
+this creates a directory with the repo, inclusing a folder `src`
 
 #### Step 1.b)
 
@@ -24,7 +24,7 @@ Install the latest version of the [Netlogo desktop app](http://www.netlogoweb.or
 
 #### Step 3
 
-Navigate to the src folder from your repository/download and open `SWILT-Simulation.nlogo` with NetLogo
+Navigate to the `src` folder from your repository/download and open `SWILT-Simulation.nlogo` with NetLogo
 
 ![Screenshot of Swarmfabsim after startup](/pics/screenshot_startup.png?raw=true "Swarmfabsim GUI")
 
