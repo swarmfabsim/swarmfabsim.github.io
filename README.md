@@ -4,6 +4,13 @@ A simulator written in NetLogo for evaluating swarm-based job-shop algorithms.
 
 The source ist available here: [https://github.com/swarmfabsim/swarmfabsim.github.io](https://github.com/swarmfabsim/swarmfabsim.github.io)
 
+**If you use this simulator, please cite the accompanying scientific paper:**
+
+_Umlauft, M.; Schranz, M. and Elmenreich, W. (2022). SwarmFabSim: A Simulation Framework for Bottom-up Optimization in Flexible
+Job-Shop Scheduling using NetLogo. In Proceedings of the 12th International Conference on Simulation and Modeling Methodologies, Tech-
+nologies and Applications - SIMULTECH, ISBN 978-989-758-578-4; ISSN 2184-2841, pages 271-279. DOI: 10.5220/0011274700003274_
+
+
 ### Installation
 
 #### Step 1.a)
