@@ -9,7 +9,7 @@ The source ist available here: [https://github.com/swarmfabsim/swarmfabsim.githu
 _Umlauft, M.; Schranz, M. and Elmenreich, W. (2022). SwarmFabSim: A Simulation Framework for Bottom-up Optimization in Flexible
 Job-Shop Scheduling using NetLogo. In Proceedings of the 12th International Conference on Simulation and Modeling Methodologies, Tech-
 nologies and Applications - SIMULTECH, ISBN 978-989-758-578-4; ISSN 2184-2841, pages 271-279. DOI: 10.5220/0011274700003274, 
-Author's copy free access: https://mobile.aau.at/publications/umlauft-2022-simultech-swarmfabsim.pdf_
+[Author's copy free access: https://mobile.aau.at/publications/umlauft-2022-simultech-swarmfabsim.pdf](https://mobile.aau.at/publications/umlauft-2022-simultech-swarmfabsim.pdf)_
 
 
 ### Installation
